@@ -1,0 +1,49 @@
+syntax = "proto3";
+package raft;
+
+service Raft {
+    rpc AppendEntries (AppendEntriesRequest) returns (AppendEntriesResponse);
+    rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse);
+    rpc Vote(VoteRequest) returns (VoteResponse);
+}
+
+message AppendEntriesRequest {
+    uint64 term = 1;
+    uint64 leader_id = 2;
+    uint64 prev_log_index = 3;
+    uint64 prev_log_term = 4;
+    string entries = 6;         // serialize
+    uint64 leader_commit = 5;
+}
+
+message AppendEntriesResponse {
+    uint64 term = 1;
+    bool success = 2;
+    string conflict_opt = 3;   // optional & serialize
+}
+
+message InstallSnapshotRequest {
+    uint64 term = 1;
+    uint64 leader_id = 2;
+    uint64 last_included_index = 3;
+    uint64 last_included_term = 4;
+    uint64 offset = 5;
+    bytes data = 7;
+    bool done = 6;
+}
+
+message InstallSnapshotResponse {
+    uint64 term = 1;
+}
+
+message VoteRequest {
+    uint64 term = 1;
+    uint64 candidate_id = 2;
+    uint64 last_log_index = 3;
+    uint64 last_log_term = 4;
+}
+
+message VoteResponse {
+    uint64 term = 1;
+    uint64 vote_granted = 2;
+}
