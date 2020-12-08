@@ -61,8 +61,8 @@ pub struct VoteRequest {
 pub struct VoteResponse {
     #[prost(uint64, tag = "1")]
     pub term: u64,
-    #[prost(uint64, tag = "2")]
-    pub vote_granted: u64,
+    #[prost(bool, tag = "2")]
+    pub vote_granted: bool,
 }
 #[doc = r" Generated client implementations."]
 pub mod raft_client {

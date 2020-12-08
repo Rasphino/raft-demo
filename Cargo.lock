@@ -39,26 +39,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-raft"
-version = "0.6.0-alpha.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cbdbee86299c2d140590b49f6cd4505b0a34522f2bb8d7354d9f1e4f92befb7"
-dependencies = [
- "anyhow",
- "async-trait",
- "bytes 0.5.6",
- "derive_more",
- "futures 0.3.8",
- "log",
- "rand",
- "serde",
- "thiserror",
- "tokio 0.2.23",
- "tracing",
- "tracing-futures",
-]
-
-[[package]]
 name = "async-stream"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -643,12 +623,12 @@ dependencies = [
 
 [[package]]
 name = "memstore"
-version = "0.2.0-alpha.0"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd634e5ca9838d2ffeb324b2e7b868e5b1f3c8775f57d742166bf749d08cc84f"
+checksum = "924d6d552ace0f6f58dea4f6e9257891b7d6c43b886a67f397680d3cee819f6e"
 dependencies = [
  "anyhow",
- "async-raft 0.6.0-alpha.1",
+ "async-raft",
  "serde",
  "serde_json",
  "thiserror",
@@ -965,7 +945,7 @@ name = "raft-demo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-raft 0.5.5",
+ "async-raft",
  "async-trait",
  "memstore",
  "once_cell",
@@ -976,6 +956,7 @@ dependencies = [
  "slog-async",
  "slog-term",
  "tokio 0.2.23",
+ "toml",
  "tonic",
  "tonic-build",
 ]
@@ -1513,6 +1494,15 @@ dependencies = [
  "log",
  "pin-project-lite 0.1.11",
  "tokio 0.2.23",
+]
+
+[[package]]
+name = "toml"
+version = "0.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75cf45bb0bef80604d001caaec0d09da99611b3c0fd39d3080468875cdb65645"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

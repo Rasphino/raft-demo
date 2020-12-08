@@ -45,5 +45,5 @@ message VoteRequest {
 
 message VoteResponse {
     uint64 term = 1;
-    uint64 vote_granted = 2;
+    bool vote_granted = 2;
 }
