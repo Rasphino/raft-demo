@@ -1,23 +1,34 @@
 mod raft_rpc;
 
 use std::sync::{Arc};
+use raft_rpc::raft_server::RaftServer;
 use tokio::sync::Mutex;
 
-use crate::raft_rpc::AppendEntriesResponse;
+use tonic::{transport::Server};
 use anyhow::Result;
 use async_raft::{raft, AppData, AppDataResponse, Config, RaftError, RaftNetwork};
 use async_trait::async_trait;
 use memstore::{ClientRequest, ClientResponse, MemStore};
 use once_cell::sync::Lazy;
 use tonic::{Code, Status};
+use tonic::codegen::Future;
+use crate::raft_rpc::raft_client::RaftClient;
 
-const PORT_BASE: i32 = 50000;
+const PORT_BASE: u64 = 50000;
 
 static RAFT_NODE: Lazy<Mutex<MemRaft>> = Lazy::new(|| {
     println!("Initializing...");
     let node_id = std::env::args().nth(1).expect("Expect node id").parse::<u64>().expect("Invalid node id");
     let group_size = std::env::args().nth(2).expect("Expect group size").parse::<u64>().expect("Invalid group size");
     println!("Node Id: {}, Group Size: {}", node_id, group_size);
+
+    let addr = format!("localhost:{}", PORT_BASE + node_id).parse().unwrap();
+    let rpc_server = RpcServer::default();
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(RaftServer::new(rpc_server))
+            .serve(addr).await.unwrap();
+    }).await.unwrap();
 
     // TODO: initialize grpc server and clients and save them to `network`
 
@@ -62,8 +73,7 @@ static RAFT_NODE: Lazy<Mutex<MemRaft>> = Lazy::new(|| {
 // =======================
 struct Network {
     // TODO: save grpc clients and server
-    // client:
-    // server:
+    // client: Lazy<>
 }
 
 #[async_raft::async_trait::async_trait]
@@ -177,7 +187,7 @@ type MemRaft = async_raft::Raft<ClientRequest, ClientResponse, Network, memstore
 
 #[tokio::main]
 async fn main() {
-    println!("Hello, world!");
+    let mut client = RaftClient::connect("http://[::1]:50051").await?;
 
     // TODO: What can we do with the raft node? How can we implement our business logic based on the provided raft api?
 }
