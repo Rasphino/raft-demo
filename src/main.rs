@@ -5,7 +5,7 @@ use raft_rpc::raft_server::RaftServer;
 use tokio::sync::Mutex;
 
 use tonic::{transport::Server};
-use anyhow::Result;
+use anyhow::{Result, Context};
 use async_raft::{raft, AppData, AppDataResponse, Config, RaftError, RaftNetwork};
 use async_trait::async_trait;
 use memstore::{ClientRequest, ClientResponse, MemStore};
@@ -14,14 +14,26 @@ use tonic::{Code, Status};
 use tonic::codegen::Future;
 use crate::raft_rpc::raft_client::RaftClient;
 use tonic::transport::Channel;
-use crate::raft_rpc::AppendEntriesRequest;
-use async_raft::raft::AppendEntriesResponse;
+use crate::raft_rpc::{AppendEntriesRequest, InstallSnapshotRequest, VoteRequest};
+use async_raft::raft::{AppendEntriesResponse, InstallSnapshotResponse, VoteResponse, ClientWriteRequest};
 use std::cell::RefCell;
 use std::ops::Deref;
+use slog::{error, info, o, Drain, Logger};
+use std::thread;
+use std::thread::sleep;
+use tokio::time::Duration;
+use std::collections::HashSet;
 
 const PORT_BASE: u64 = 50000;
 
 static RAFT_NODE: OnceCell<Mutex<MemRaft>> = OnceCell::new();
+
+static LOGGER: Lazy<Logger> = Lazy::new(|| {
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::FullFormat::new(decorator).build().fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+    slog::Logger::root(drain, o!())
+});
 
 // =======================
 // Application Data
@@ -34,14 +46,14 @@ static RAFT_NODE: OnceCell<Mutex<MemRaft>> = OnceCell::new();
 //     serial: u64,
 //     status: String
 // }
-
+//
 // impl AppData for ClientRequest {}
-
+//
 // #[derive(Serialize, Deserialize, Debug, Clone)]
 // struct ClientResponse(std::result::Result<Option<String>, ClientError>);
-
+//
 // impl AppDataResponse for ClientResponse {}
-
+//
 // #[derive(Serialize, Deserialize, Debug, Clone)]
 // enum ClientError {
 //     /// This request has already been applied to the state machine, and the original response
@@ -58,12 +70,12 @@ struct Network {
 
 #[async_raft::async_trait::async_trait]
 impl RaftNetwork<memstore::ClientRequest> for Network {
-    // TODO: Implement these boilerplate trait functions
     async fn append_entries(
         &self,
         target: async_raft::NodeId,
         rpc: raft::AppendEntriesRequest<ClientRequest>,
     ) -> Result<raft::AppendEntriesResponse> {
+        info!(LOGGER, "CLIENT send append_entries request to {}: {:?}", target, rpc);
         let request = tonic::Request::new(AppendEntriesRequest {
             term: rpc.term,
             leader_id: rpc.leader_id,
@@ -79,6 +91,8 @@ impl RaftNetwork<memstore::ClientRequest> for Network {
 
             client.append_entries(request).await
         };
+
+        info!(LOGGER, "CLIENT received append_entries response from {}: {:?}", target, response);
 
         match response {
             Ok(response) => {
@@ -100,7 +114,34 @@ impl RaftNetwork<memstore::ClientRequest> for Network {
         target: async_raft::NodeId,
         rpc: raft::InstallSnapshotRequest,
     ) -> Result<raft::InstallSnapshotResponse> {
-        unimplemented!()
+        let request = tonic::Request::new(InstallSnapshotRequest {
+            term: rpc.term,
+            leader_id: rpc.leader_id,
+            last_included_index: rpc.last_included_index,
+            last_included_term: rpc.last_included_term,
+            offset: rpc.offset,
+            data: rpc.data,
+            done: rpc.done
+        });
+
+        let response = {
+            let mut lock = self.clients.lock().await;
+            let client = (*lock).get_mut(target as usize).unwrap();
+
+            client.install_snapshot(request).await
+        };
+
+        match response {
+            Ok(response) => {
+                let response = response.into_inner();
+                Ok(InstallSnapshotResponse {
+                    term: (&response).term,
+                })
+            },
+            Err(e) => {
+                Err(anyhow::Error::new(e))
+            }
+        }
     }
 
     async fn vote(
@@ -108,7 +149,36 @@ impl RaftNetwork<memstore::ClientRequest> for Network {
         target: async_raft::NodeId,
         rpc: async_raft::raft::VoteRequest,
     ) -> Result<async_raft::raft::VoteResponse> {
-        unimplemented!()
+        info!(LOGGER, "CLIENT send vote request to {}: {:?}", target, rpc);
+        let request = tonic::Request::new(VoteRequest {
+            term: rpc.term,
+            candidate_id: rpc.candidate_id,
+            last_log_index: rpc.last_log_index,
+            last_log_term: rpc.last_log_term
+        });
+
+        let response = {
+            let mut lock = self.clients.lock().await;
+            let client = (*lock).get_mut(target as usize)
+                .with_context(|| format!("Target: {}", target)).unwrap();
+
+            client.vote(request).await
+        };
+
+        info!(LOGGER, "CLIENT received vote response from {}: {:?}", target, response);
+
+        match response {
+            Ok(response) => {
+                let response = response.into_inner();
+                Ok(VoteResponse {
+                    term: (&response).term,
+                    vote_granted: (&response).vote_granted
+                })
+            },
+            Err(e) => {
+                Err(anyhow::Error::new(e))
+            }
+        }
     }
 }
 
@@ -175,6 +245,7 @@ impl raft_rpc::raft_server::Raft for RpcServer {
         &self,
         request: tonic::Request<raft_rpc::VoteRequest>,
     ) -> std::result::Result<tonic::Response<raft_rpc::VoteResponse>, tonic::Status> {
+        info!(LOGGER, "Send vote request: {:?}", request);
         let request = request.into_inner();
         let request = raft::VoteRequest {
             term: (&request).term,
@@ -203,16 +274,32 @@ async fn main() {
     // start grpc server
     let addr = format!("127.0.0.1:{}", PORT_BASE + node_id).parse().unwrap();
     let rpc_server = RpcServer::default();
-    tokio::spawn(async move {
-        Server::builder()
-            .add_service(RaftServer::new(rpc_server))
-            .serve(addr).await.unwrap();
-    }).await.unwrap();
+    let rpc_server_thread =  thread::spawn(move || {
+        let mut runtime = tokio::runtime::Runtime::new().expect("Unable to create the runtime");
+        info!(LOGGER, "Start grpc server!");
+        runtime.block_on(async {
+            Server::builder()
+                .add_service(RaftServer::new(rpc_server))
+                .serve(addr).await.unwrap();
+        });
+    });
 
     let mut clients = vec![];
-    for i in 1..=group_size {
-        let mut client = RaftClient::connect(format!("127.0.0.1:{}", PORT_BASE + i)).await.unwrap();
-        clients.push(client);
+    for i in 0..group_size {
+        loop {
+            match RaftClient::connect(format!("http://127.0.0.1:{}", PORT_BASE + i)).await {
+                Ok(c) => {
+                    info!(LOGGER, "Connect to server {} succeed", i);
+                    clients.push(c);
+                    break
+                },
+                Err(_) => {
+                    info!(LOGGER, "Connect to server {} failed, wait and retry", i);
+                    sleep(Duration::from_secs(1));
+                    continue
+                }
+            }
+        }
     }
 
     let config = Arc::new(
@@ -225,5 +312,26 @@ async fn main() {
     let raft = Mutex::new(MemRaft::new(node_id, config, network, storage));
     RAFT_NODE.set(raft);
 
+    let mut members = HashSet::new();
+    for id in 0..group_size {
+        members.insert(id);
+    }
+
+    // sleep(Duration::from_secs(2));
+
+    RAFT_NODE.get().unwrap().lock().await.initialize(members).await.unwrap();
     // TODO: What can we do with the raft node? How can we implement our business logic based on the provided raft api?
+    // if node_id == 0 {
+    //     info!(LOGGER, "Send request");
+    //     let resp =  RAFT_NODE.get().unwrap().lock().await.client_write(ClientWriteRequest::new(ClientRequest {
+    //         client: "client1".to_string(),
+    //         serial: 0,
+    //         status: "hello".to_string()
+    //     })).await.unwrap();
+    //
+    //     info!(LOGGER, "{:?}", resp);
+    // }
+
+    rpc_server_thread.join();
+
 }

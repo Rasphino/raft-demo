@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
+  <component name="CMakeRunConfigurationManager" shouldGenerate="true" shouldDeleteObsolete="true">
+    <generated />
+  </component>
   <component name="CMakeSettings">
     <configurations>
       <configuration PROFILE_NAME="Debug" CONFIG_NAME="Debug" ENABLED="true" />
@@ -9,7 +12,10 @@
     <cargoProject FILE="$PROJECT_DIR$/Cargo.toml" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="d9ef6cdb-a22f-41ec-8ead-ee641b91cece" name="Default Changelist" comment="" />
+    <list default="true" id="d9ef6cdb-a22f-41ec-8ead-ee641b91cece" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main.rs" beforeDir="false" afterPath="$PROJECT_DIR$/src/main.rs" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -48,7 +54,7 @@
   <component name="RunManager">
     <configuration name="Run raft-demo" type="CargoCommandRunConfiguration" factoryName="Cargo Command" temporary="true">
       <option name="channel" value="DEFAULT" />
-      <option name="command" value="run --package raft-demo --bin raft-demo" />
+      <option name="command" value="run --package raft-demo --bin raft-demo -- 1 3" />
       <option name="allFeatures" value="false" />
       <option name="emulateTerminal" value="false" />
       <option name="backtrace" value="SHORT" />
@@ -83,7 +89,7 @@
       <updated>1607393905487</updated>
       <workItem from="1607393907085" duration="12579000" />
       <workItem from="1607421618325" duration="1542000" />
-      <workItem from="1607495507959" duration="9137000" />
+      <workItem from="1607495507959" duration="17353000" />
     </task>
     <servers />
   </component>
